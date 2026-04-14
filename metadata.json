@@ -1,5 +1,5 @@
 {
-  "name": "Há Combustível — Maputo",
+  "name": "Fuel-Track",
   "description": "Monitoramento em tempo real da disponibilidade de combustível em Maputo, Moçambique.",
   "requestFramePermissions": ["geolocation"],
   "majorCapabilities": []

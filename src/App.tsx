@@ -47,7 +47,12 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronUp,
-  Navigation
+  Navigation,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Bell,
+  Download
 } from 'lucide-react';
 
 // Leaflet
@@ -143,6 +148,10 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [expandedStationId, setExpandedStationId] = useState<string | null>(null);
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Station; direction: 'asc' | 'desc' } | null>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   
   // Form State
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -184,6 +193,42 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // PWA Install Prompt Listener
+  useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBanner(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  // Notification Permission Check
+  useEffect(() => {
+    if ('Notification' in window) {
+      setNotificationsEnabled(Notification.permission === 'granted');
+    }
+  }, []);
+
+  // Monitor station changes for notifications
+  const prevStationsRef = React.useRef<Station[]>([]);
+  useEffect(() => {
+    if (notificationsEnabled && prevStationsRef.current.length > 0) {
+      stations.forEach(station => {
+        const prev = prevStationsRef.current.find(s => s.id === station.id);
+        if (prev && prev.status !== station.status) {
+          const statusText = station.status === 'verde' ? 'Disponível' : station.status === 'amarelo' ? 'Com Fila' : 'Esgotado';
+          new Notification(`Fuel-Tracker: ${station.name}`, {
+            body: `Estado atualizado para: ${statusText} em ${station.neighborhood}`,
+            icon: 'https://cdn-icons-png.flaticon.com/512/483/483497.png'
+          });
+        }
+      });
+    }
+    prevStationsRef.current = stations;
+  }, [stations, notificationsEnabled]);
+
   // Test Connection
   useEffect(() => {
     async function testConnection() {
@@ -213,6 +258,31 @@ export default function App() {
       toast.success("Sessão encerrada.");
     } catch (error) {
       toast.error("Erro ao encerrar sessão.");
+    }
+  };
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      console.log('User accepted the install prompt');
+    }
+    setDeferredPrompt(null);
+    setShowInstallBanner(false);
+  };
+
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) {
+      toast.error("Este navegador não suporta notificações.");
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      setNotificationsEnabled(true);
+      toast.success("Notificações ativadas!");
+    } else {
+      toast.error("Permissão de notificação negada.");
     }
   };
 
@@ -268,13 +338,32 @@ export default function App() {
   };
 
   const filteredStations = useMemo(() => {
-    return stations.filter(s => {
+    let result = stations.filter(s => {
       const matchesFilter = filter === 'todos' || s.status === filter;
       const matchesSearch = s.name.toLowerCase().includes(search.toLowerCase()) || 
                            s.neighborhood.toLowerCase().includes(search.toLowerCase());
       return matchesFilter && matchesSearch;
     });
-  }, [stations, filter, search]);
+
+    if (sortConfig) {
+      result = [...result].sort((a, b) => {
+        const aValue = a[sortConfig.key];
+        const bValue = b[sortConfig.key];
+        
+        if (aValue === undefined || bValue === undefined) return 0;
+        
+        if (aValue < bValue) {
+          return sortConfig.direction === 'asc' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === 'asc' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+
+    return result;
+  }, [stations, filter, search, sortConfig]);
 
   const stats = useMemo(() => {
     return {
@@ -283,6 +372,14 @@ export default function App() {
       vermelho: stations.filter(s => s.status === 'vermelho').length,
     };
   }, [stations]);
+
+  const handleSort = (key: keyof Station) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans pb-20">
@@ -296,28 +393,56 @@ export default function App() {
           </div>
           <div>
             <h1 className="text-lg font-extrabold tracking-tight leading-none">
-              Há Combustível
+              Fuel-Tracker
             </h1>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold mt-1">Maputo</p>
           </div>
         </div>
         
-        {user ? (
-          <div className="flex items-center gap-3">
-            <div className="hidden sm:block text-right">
-              <p className="text-xs font-semibold">{user.displayName}</p>
-              <button onClick={handleLogout} className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 ml-auto transition-colors">
-                Sair <LogOut className="w-3 h-3" />
-              </button>
-            </div>
-            <img src={user.photoURL || ''} alt="User" className="w-8 h-8 rounded-full border border-border" referrerPolicy="no-referrer" />
-          </div>
-        ) : (
-          <Button variant="outline" size="sm" onClick={handleLogin} className="rounded-lg border-border hover:bg-muted font-semibold text-xs">
-            <LogIn className="w-4 h-4 mr-2" /> Entrar
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className={`h-8 w-8 p-0 rounded-full ${notificationsEnabled ? 'text-emerald-600' : 'text-muted-foreground'}`}
+            onClick={requestNotificationPermission}
+            title={notificationsEnabled ? "Notificações Ativas" : "Ativar Notificações"}
+          >
+            <Bell className={`w-4 h-4 ${notificationsEnabled ? 'fill-current' : ''}`} />
           </Button>
-        )}
+
+          {user ? (
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:block text-right">
+                <p className="text-xs font-semibold">{user.displayName}</p>
+                <button onClick={handleLogout} className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 ml-auto transition-colors">
+                  Sair <LogOut className="w-3 h-3" />
+                </button>
+              </div>
+              <img src={user.photoURL || ''} alt="User" className="w-8 h-8 rounded-full border border-border" referrerPolicy="no-referrer" />
+            </div>
+          ) : (
+            <Button variant="outline" size="sm" onClick={handleLogin} className="rounded-lg border-border hover:bg-muted font-semibold text-xs">
+              <LogIn className="w-4 h-4 mr-2" /> Entrar
+            </Button>
+          )}
+        </div>
       </header>
+
+      {showInstallBanner && (
+        <div className="bg-orange-600 text-white px-6 py-3 flex items-center justify-between animate-in fade-in slide-in-from-top duration-500">
+          <div className="flex items-center gap-3">
+            <Download className="w-5 h-5" />
+            <p className="text-xs font-medium">Instale o Fuel-Tracker para acesso rápido e notificações!</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" className="h-7 text-[10px] font-bold" onClick={handleInstallClick}>
+              INSTALAR
+            </Button>
+            <button onClick={() => setShowInstallBanner(false)} className="p-1 hover:bg-white/10 rounded">
+              <Plus className="w-4 h-4 rotate-45" />
+            </button>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         {/* Stats Summary - Bento Style */}
@@ -387,7 +512,7 @@ export default function App() {
                 <div className="relative w-full sm:w-64">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                   <Input 
-                    placeholder="Procurar posto ou bairro..." 
+                    placeholder="Procurar marca ou bairro..." 
                     className="pl-9 h-9 text-xs bg-muted/50 border-border rounded-lg w-full"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
@@ -396,9 +521,9 @@ export default function App() {
                 <Tabs defaultValue="todos" value={filter} onValueChange={setFilter} className="w-full sm:w-auto">
                   <TabsList className="grid grid-cols-4 gap-1 bg-muted/50 p-1 rounded-lg h-9">
                     <TabsTrigger value="todos" className="text-[10px] px-3">Todos</TabsTrigger>
-                    <TabsTrigger value="verde" className="text-[10px] px-3 data-[state=active]:bg-emerald-500 data-[state=active]:text-white">Verde</TabsTrigger>
-                    <TabsTrigger value="amarelo" className="text-[10px] px-3 data-[state=active]:bg-amber-500 data-[state=active]:text-white">Amarelo</TabsTrigger>
-                    <TabsTrigger value="vermelho" className="text-[10px] px-3 data-[state=active]:bg-rose-500 data-[state=active]:text-white">Vermelho</TabsTrigger>
+                    <TabsTrigger value="verde" className="text-[10px] px-3 data-[state=active]:bg-emerald-500 data-[state=active]:text-white">Disponível</TabsTrigger>
+                    <TabsTrigger value="amarelo" className="text-[10px] px-3 data-[state=active]:bg-amber-500 data-[state=active]:text-white">Com fila</TabsTrigger>
+                    <TabsTrigger value="vermelho" className="text-[10px] px-3 data-[state=active]:bg-rose-500 data-[state=active]:text-white">Esgotado</TabsTrigger>
                   </TabsList>
                 </Tabs>
               </div>
@@ -422,8 +547,20 @@ export default function App() {
                   <table className="w-full text-left border-collapse">
                     <thead className="bg-muted/30 sticky top-0 z-10">
                       <tr>
-                        <th className="px-5 py-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border">Posto</th>
-                        <th className="px-5 py-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border hidden sm:table-cell">Bairro</th>
+                        <th className="px-5 py-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border">Marca</th>
+                        <th 
+                          className="px-5 py-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border hidden sm:table-cell cursor-pointer hover:text-foreground transition-colors"
+                          onClick={() => handleSort('neighborhood')}
+                        >
+                          <div className="flex items-center gap-1">
+                            Bairro
+                            {sortConfig?.key === 'neighborhood' ? (
+                              sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                            ) : (
+                              <ArrowUpDown className="w-3 h-3 opacity-30" />
+                            )}
+                          </div>
+                        </th>
                         <th className="px-5 py-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border">Status</th>
                         <th className="px-5 py-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border text-right">Ação</th>
                       </tr>
@@ -481,7 +618,7 @@ export default function App() {
                               <td colSpan={4} className="px-5 py-6 border-b border-border/50">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                   <div className="space-y-3">
-                                    <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Detalhes do Posto</h4>
+                                    <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Detalhes da Marca</h4>
                                     <div className="space-y-2">
                                       <p className="text-xs text-muted-foreground leading-relaxed">
                                         <span className="font-bold text-foreground">Observações:</span><br />
@@ -619,16 +756,24 @@ export default function App() {
               {!user && <span className="block mt-1 text-orange-600 font-bold">A reportar como Visitante.</span>}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4 py-4 max-h-[70vh] overflow-y-auto px-1">
+          <form onSubmit={handleSubmit} className="space-y-4 py-4 max-h-[70vh] overflow-y-auto overflow-x-hidden px-1">
             <div className="space-y-2">
-              <Label htmlFor="name">Nome do Posto</Label>
-              <Input 
-                id="name" 
-                placeholder="Ex: Galp Marginal" 
-                required 
-                value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
-              />
+              <Label htmlFor="name">Marca do Posto</Label>
+              <Select 
+                value={formData.name} 
+                onValueChange={(value) => setFormData({...formData, name: value})}
+              >
+                <SelectTrigger id="name" className="w-full bg-muted/50 border-border rounded-lg h-10 text-xs">
+                  <SelectValue placeholder="Selecione a marca" />
+                </SelectTrigger>
+                <SelectContent>
+                  {["Galp", "Petromoc", "Som", "Puma", "Total", "Nkomazi", "Engen", "Êxito", "RUR", "Union Energy", "Outro(a)-(especifique nas Observações)"].map((brand) => (
+                    <SelectItem key={brand} value={brand} className="text-xs">
+                      {brand}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="neighborhood">Bairro</Label>
@@ -738,10 +883,6 @@ export default function App() {
 
       {/* Footer Info */}
       <footer className="mt-8 px-6 py-10 text-center space-y-4 border-t border-gray-200">
-        <div className="flex justify-center gap-2">
-          <Badge variant="outline" className="text-[10px] border-gray-300">Comunidade Maputo</Badge>
-          <Badge variant="outline" className="text-[10px] border-gray-300">Tempo Real</Badge>
-        </div>
         <p className="text-[10px] text-gray-400 leading-relaxed max-w-xs mx-auto">
           Os dados são fornecidos por utilizadores. Verifique sempre a data da última atualização.
         </p>
