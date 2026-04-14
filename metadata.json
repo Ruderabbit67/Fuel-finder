@@ -1,0 +1,6 @@
+{
+  "name": "Há Combustível — Maputo",
+  "description": "Monitoramento em tempo real da disponibilidade de combustível em Maputo, Moçambique.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": []
+}

@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: stations
+    // Document ID: auto-generated
+    // Fields:
+    //   - name: string (required)
+    //   - neighborhood: string (required)
+    //   - status: string (required, ['verde', 'amarelo', 'vermelho'])
+    //   - observations: string (optional)
+    //   - updatedAt: string (required, ISO 8601)
+    //   - updatedBy: string (required, UID)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "francyborg5@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidStation(data) {
+      return data.keys().hasAll(['name', 'neighborhood', 'status', 'updatedAt', 'updatedBy']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.neighborhood is string && data.neighborhood.size() > 0 && data.neighborhood.size() < 100 &&
+             (!('latitude' in data) || data.latitude is number) &&
+             (!('longitude' in data) || data.longitude is number) &&
+             data.status in ['verde', 'amarelo', 'vermelho'] &&
+             data.updatedAt is string &&
+             data.updatedBy is string && 
+             (data.updatedBy == "guest" || (isAuthenticated() && data.updatedBy == request.auth.uid));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /stations/{stationId} {
+      // Anyone can read the status
+      allow read: if true;
+      
+      // Allow guest and authenticated reporting
+      allow create: if isValidStation(request.resource.data);
+      allow update: if isValidStation(request.resource.data);
+      
+      // Only admins can delete
+      allow delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+  }
+}

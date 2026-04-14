@@ -1,0 +1,26 @@
+{
+  "entities": {
+    "FuelStation": {
+      "title": "Fuel Station",
+      "description": "A gas station in Maputo",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the station" },
+        "neighborhood": { "type": "string", "description": "Neighborhood/Bairro" },
+        "latitude": { "type": "number", "description": "Latitude coordinate" },
+        "longitude": { "type": "number", "description": "Longitude coordinate" },
+        "status": { "type": "string", "enum": ["verde", "amarelo", "vermelho"], "description": "Fuel availability status" },
+        "observations": { "type": "string", "description": "Additional notes" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp" },
+        "updatedBy": { "type": "string", "description": "UID of the user who last updated" }
+      },
+      "required": ["name", "neighborhood", "status", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/stations": {
+      "schema": "FuelStation",
+      "description": "Collection of fuel stations"
+    }
+  }
+}
