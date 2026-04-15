@@ -53,7 +53,7 @@ import {
   ArrowDown,
   Bell,
   Download,
-  MessageCircle
+  Share2
 } from 'lucide-react';
 
 // Leaflet
@@ -460,17 +460,28 @@ export default function App() {
     setSortConfig({ key, direction });
   };
 
-  const shareOnWhatsApp = (station: Station) => {
+  const shareStation = async (station: Station) => {
     const time = formatDistanceToNow(new Date(station.updatedAt), { addSuffix: true, locale: ptBR });
-    let message = `*Fuel-Tracker Maputo*\n\n⛽ *${station.name}* (${station.neighborhood})\n📍 Estado: *${station.status}*\n🕒 Atualizado: ${time}`;
-    
-    if (station.latitude && station.longitude) {
-      message += `\n\nLocalização: https://www.google.com/maps/search/?api=1&query=${station.latitude},${station.longitude}`;
+    const shareData = {
+      title: 'Fuel-Tracker Maputo',
+      text: `⛽ *${station.name}* (${station.neighborhood})\n📍 Estado: *${station.status}*\n🕒 Atualizado: ${time}\n\nEnviado via Fuel-Tracker`,
+      url: station.latitude && station.longitude 
+        ? `https://www.google.com/maps/search/?api=1&query=${station.latitude},${station.longitude}`
+        : window.location.origin
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (err) {
+        console.log('Error sharing:', err);
+      }
+    } else {
+      // Fallback to WhatsApp if Web Share API is not available
+      const message = `*${shareData.title}*\n\n${shareData.text}\n\nLocalização: ${shareData.url}`;
+      const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
+      window.open(url, '_blank');
     }
-    
-    message += `\n\n_Enviado via Fuel-Tracker_`;
-    const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
   };
 
   return (
@@ -768,10 +779,10 @@ export default function App() {
                                       <Button 
                                         variant="outline" 
                                         size="sm" 
-                                        className="h-8 text-[10px] bg-white border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                                        onClick={() => shareOnWhatsApp(station)}
+                                        className="h-8 text-[10px] bg-white border-blue-200 text-blue-700 hover:bg-blue-50"
+                                        onClick={() => shareStation(station)}
                                       >
-                                        <MessageCircle className="w-3.5 h-3.5 mr-1.5 fill-emerald-500 text-emerald-500" /> WhatsApp
+                                        <Share2 className="w-3.5 h-3.5 mr-1.5 text-blue-500" /> Partilhar
                                       </Button>
                                       
                                       {station.latitude && station.longitude ? (
@@ -862,10 +873,10 @@ export default function App() {
                             <Button 
                               variant="outline" 
                               size="sm" 
-                              className="w-full h-7 text-[10px] border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                              onClick={() => shareOnWhatsApp(station)}
+                              className="w-full h-7 text-[10px] border-blue-200 text-blue-700 hover:bg-blue-50"
+                              onClick={() => shareStation(station)}
                             >
-                              <MessageCircle className="w-3 h-3 mr-1 fill-emerald-500 text-emerald-500" /> WhatsApp
+                              <Share2 className="w-3 h-3 mr-1 text-blue-500" /> Partilhar
                             </Button>
                             <Button 
                               variant="outline" 
