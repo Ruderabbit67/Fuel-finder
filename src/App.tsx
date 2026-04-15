@@ -52,7 +52,8 @@ import {
   ArrowUp,
   ArrowDown,
   Bell,
-  Download
+  Download,
+  MessageCircle
 } from 'lucide-react';
 
 // Leaflet
@@ -81,7 +82,7 @@ L.Marker.prototype.options.icon = DefaultIcon;
 
 // Custom icons for status
 const getStatusIcon = (status: string) => {
-  const color = status === 'verde' ? '#10b981' : status === 'amarelo' ? '#f59e0b' : '#f43f5e';
+  const color = status === 'Disponível' ? '#10b981' : status === 'Com Fila' ? '#f59e0b' : '#f43f5e';
   return L.divIcon({
     className: 'custom-div-icon',
     html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.3);"></div>`,
@@ -89,6 +90,48 @@ const getStatusIcon = (status: string) => {
     iconAnchor: [6, 6]
   });
 };
+
+const getReferenceIcon = () => {
+  return L.divIcon({
+    className: 'reference-div-icon',
+    html: `<div style="background-color: #3b82f6; width: 10px; height: 10px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.3);"></div>`,
+    iconSize: [10, 10],
+    iconAnchor: [5, 5]
+  });
+};
+
+const REFERENCE_STATIONS = [
+  { lat: -25.9771591, lon: 32.5792871, name: "Total", neighborhood: "Polana" },
+  { lat: -25.9537478, lon: 32.5765814, name: "BP", neighborhood: "Alto Maé" },
+  { lat: -25.9474444, lon: 32.5782761, name: "Total", neighborhood: "Maxaquene" },
+  { lat: -25.9450085, lon: 32.6201906, name: "Engen", neighborhood: "Costa do Sol" },
+  { lat: -25.9637772, lon: 32.586307, name: "BP", neighborhood: "Polana" },
+  { lat: -25.9642119, lon: 32.5860709, name: "Petromoc", neighborhood: "Polana" },
+  { lat: -25.9536762, lon: 32.58832, name: "Total", neighborhood: "Sommerschield" },
+  { lat: -25.9604483, lon: 32.5778285, name: "Galp", neighborhood: "Alto Maé" },
+  { lat: -25.9522294, lon: 32.5887075, name: "Galp", neighborhood: "Sommerschield" },
+  { lat: -25.9784846, lon: 32.5954984, name: "BP", neighborhood: "Polana" },
+  { lat: -25.9615104, lon: 32.5658471, name: "BP Express", neighborhood: "Malhangalene" },
+  { lat: -25.9592649, lon: 32.5842695, name: "Engen", neighborhood: "Polana" },
+  { lat: -25.9700394, lon: 32.5709037, name: "Petromoc", neighborhood: "Baixa" },
+  { lat: -25.9723516, lon: 32.5946113, name: "Total", neighborhood: "Polana" },
+  { lat: -25.9299416, lon: 32.5109117, name: "BP", neighborhood: "Machava" },
+  { lat: -25.926796, lon: 32.5767229, name: "Galp", neighborhood: "Aeroporto" },
+  { lat: -25.9062943, lon: 32.6352069, name: "Bombas Petromoc", neighborhood: "Dona Alice" },
+  { lat: -25.9507475, lon: 32.4682588, name: "Bombas de Gasolina", neighborhood: "Matola" },
+  { lat: -25.9266655, lon: 32.6056592, name: "GALP", neighborhood: "Magoanine" },
+  { lat: -25.9262263, lon: 32.5578591, name: "BP", neighborhood: "T3" },
+  { lat: -25.9267547, lon: 32.557351, name: "Petromoc", neighborhood: "T3" },
+  { lat: -25.9273068, lon: 32.5574689, name: "Nkomazi", neighborhood: "T3" },
+  { lat: -25.9136726, lon: 32.5165803, name: "Petromoc", neighborhood: "Machava" },
+  { lat: -25.9128999, lon: 32.5281178, name: "Petromoc-Sasol", neighborhood: "Machava" },
+  { lat: -25.8110798, lon: 32.5485886, name: "Total Garage", neighborhood: "Marracuene" },
+  { lat: -25.8063658, lon: 32.5733053, name: "Puma", neighborhood: "Marracuene" },
+  { lat: -25.7912627, lon: 32.582098, name: "Galp", neighborhood: "Marracuene" },
+  { lat: -25.8284789, lon: 32.5707326, name: "Engen", neighborhood: "Marracuene" },
+  { lat: -25.9037427, lon: 32.5656857, name: "Total", neighborhood: "Zimpeto" },
+  { lat: -25.9599744, lon: 32.5645068, name: "Petromoc", neighborhood: "Malhangalene" }
+];
 
 // UI Components
 import { Button } from '@/components/ui/button';
@@ -107,7 +150,7 @@ interface Station {
   id: string;
   name: string;
   neighborhood: string;
-  status: 'verde' | 'amarelo' | 'vermelho';
+  status: 'Disponível' | 'Com Fila' | 'Esgotado';
   observations?: string;
   updatedAt: string;
   updatedBy: string;
@@ -115,18 +158,52 @@ interface Station {
   longitude?: number;
 }
 
-function LocationPicker({ onLocationSelect, initialPosition }: { onLocationSelect: (lat: number, lng: number) => void, initialPosition?: [number, number] }) {
+function LocationPicker({ onLocationSelect, initialPosition, onNeighborhoodSuggest }: { onLocationSelect: (lat: number, lng: number) => void, initialPosition?: [number, number], onNeighborhoodSuggest?: (neighborhood: string) => void }) {
   const [position, setPosition] = useState<[number, number] | null>(initialPosition || null);
+
+  const findNearestNeighborhood = (lat: number, lon: number) => {
+    let minDistance = Infinity;
+    let nearest = "";
+    
+    REFERENCE_STATIONS.forEach(ref => {
+      const dist = Math.sqrt(Math.pow(ref.lat - lat, 2) + Math.pow(ref.lon - lon, 2));
+      if (dist < minDistance) {
+        minDistance = dist;
+        nearest = ref.neighborhood;
+      }
+    });
+    
+    // Only suggest if reasonably close (approx 2km in lat/lon degrees is roughly 0.02)
+    if (minDistance < 0.03 && nearest) {
+      return nearest;
+    }
+    return null;
+  };
 
   useMapEvents({
     click(e) {
-      setPosition([e.latlng.lat, e.latlng.lng]);
-      onLocationSelect(e.latlng.lat, e.latlng.lng);
+      const { lat, lng } = e.latlng;
+      setPosition([lat, lng]);
+      onLocationSelect(lat, lng);
+      
+      if (onNeighborhoodSuggest) {
+        const suggested = findNearestNeighborhood(lat, lng);
+        if (suggested) {
+          onNeighborhoodSuggest(suggested);
+        }
+      }
     },
   });
 
   return position === null ? null : (
-    <Marker position={position} />
+    <Marker position={position}>
+      <Popup>
+        <div className="p-1 text-center">
+          <p className="text-[10px] font-bold text-orange-600">Localização Selecionada</p>
+          <p className="text-[8px] text-muted-foreground">Podes arrastar ou clicar noutro local</p>
+        </div>
+      </Popup>
+    </Marker>
   );
 }
 
@@ -152,6 +229,7 @@ export default function App() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
   
   // Form State
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -159,7 +237,7 @@ export default function App() {
   const [formData, setFormData] = useState({
     name: '',
     neighborhood: '',
-    status: 'verde' as Station['status'],
+    status: 'Disponível' as Station['status'],
     observations: '',
     latitude: undefined as number | undefined,
     longitude: undefined as number | undefined
@@ -218,9 +296,8 @@ export default function App() {
       stations.forEach(station => {
         const prev = prevStationsRef.current.find(s => s.id === station.id);
         if (prev && prev.status !== station.status) {
-          const statusText = station.status === 'verde' ? 'Disponível' : station.status === 'amarelo' ? 'Com Fila' : 'Esgotado';
           new Notification(`Fuel-Tracker: ${station.name}`, {
-            body: `Estado atualizado para: ${statusText} em ${station.neighborhood}`,
+            body: `Estado atualizado para: ${station.status} em ${station.neighborhood}`,
             icon: 'https://cdn-icons-png.flaticon.com/512/483/483497.png'
           });
         }
@@ -316,12 +393,13 @@ export default function App() {
     setFormData({
       name: '',
       neighborhood: '',
-      status: 'verde',
+      status: 'Disponível',
       observations: '',
       latitude: undefined,
       longitude: undefined
     });
     setEditingStation(null);
+    setShowMapPicker(false);
   };
 
   const openEdit = (station: Station) => {
@@ -334,6 +412,7 @@ export default function App() {
       latitude: station.latitude,
       longitude: station.longitude
     });
+    setShowMapPicker(!!(station.latitude && station.longitude));
     setIsDialogOpen(true);
   };
 
@@ -367,9 +446,9 @@ export default function App() {
 
   const stats = useMemo(() => {
     return {
-      verde: stations.filter(s => s.status === 'verde').length,
-      amarelo: stations.filter(s => s.status === 'amarelo').length,
-      vermelho: stations.filter(s => s.status === 'vermelho').length,
+      verde: stations.filter(s => s.status === 'Disponível').length,
+      amarelo: stations.filter(s => s.status === 'Com Fila').length,
+      vermelho: stations.filter(s => s.status === 'Esgotado').length,
     };
   }, [stations]);
 
@@ -379,6 +458,19 @@ export default function App() {
       direction = 'desc';
     }
     setSortConfig({ key, direction });
+  };
+
+  const shareOnWhatsApp = (station: Station) => {
+    const time = formatDistanceToNow(new Date(station.updatedAt), { addSuffix: true, locale: ptBR });
+    let message = `*Fuel-Tracker Maputo*\n\n⛽ *${station.name}* (${station.neighborhood})\n📍 Estado: *${station.status}*\n🕒 Atualizado: ${time}`;
+    
+    if (station.latitude && station.longitude) {
+      message += `\n\nLocalização: https://www.google.com/maps/search/?api=1&query=${station.latitude},${station.longitude}`;
+    }
+    
+    message += `\n\n_Enviado via Fuel-Tracker_`;
+    const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
   };
 
   return (
@@ -521,9 +613,9 @@ export default function App() {
                 <Tabs defaultValue="todos" value={filter} onValueChange={setFilter} className="w-full sm:w-auto">
                   <TabsList className="grid grid-cols-4 gap-1 bg-muted/50 p-1 rounded-lg h-9">
                     <TabsTrigger value="todos" className="text-[10px] px-3">Todos</TabsTrigger>
-                    <TabsTrigger value="verde" className="text-[10px] px-3 data-[state=active]:bg-emerald-500 data-[state=active]:text-white">Disponível</TabsTrigger>
-                    <TabsTrigger value="amarelo" className="text-[10px] px-3 data-[state=active]:bg-amber-500 data-[state=active]:text-white">Com fila</TabsTrigger>
-                    <TabsTrigger value="vermelho" className="text-[10px] px-3 data-[state=active]:bg-rose-500 data-[state=active]:text-white">Esgotado</TabsTrigger>
+                    <TabsTrigger value="Disponível" className="text-[10px] px-3 data-[state=active]:bg-emerald-500 data-[state=active]:text-white">Disponível</TabsTrigger>
+                    <TabsTrigger value="Com Fila" className="text-[10px] px-3 data-[state=active]:bg-amber-500 data-[state=active]:text-white">Com fila</TabsTrigger>
+                    <TabsTrigger value="Esgotado" className="text-[10px] px-3 data-[state=active]:bg-rose-500 data-[state=active]:text-white">Esgotado</TabsTrigger>
                   </TabsList>
                 </Tabs>
               </div>
@@ -547,7 +639,19 @@ export default function App() {
                   <table className="w-full text-left border-collapse">
                     <thead className="bg-muted/30 sticky top-0 z-10">
                       <tr>
-                        <th className="px-5 py-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border">Marca</th>
+                        <th 
+                          className="px-5 py-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border cursor-pointer hover:text-foreground transition-colors"
+                          onClick={() => handleSort('name')}
+                        >
+                          <div className="flex items-center gap-1">
+                            Marca
+                            {sortConfig?.key === 'name' ? (
+                              sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                            ) : (
+                              <ArrowUpDown className="w-3 h-3 opacity-30" />
+                            )}
+                          </div>
+                        </th>
                         <th 
                           className="px-5 py-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border hidden sm:table-cell cursor-pointer hover:text-foreground transition-colors"
                           onClick={() => handleSort('neighborhood')}
@@ -561,8 +665,32 @@ export default function App() {
                             )}
                           </div>
                         </th>
-                        <th className="px-5 py-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border">Status</th>
-                        <th className="px-5 py-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border text-right">Ação</th>
+                        <th 
+                          className="px-5 py-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border cursor-pointer hover:text-foreground transition-colors"
+                          onClick={() => handleSort('status')}
+                        >
+                          <div className="flex items-center gap-1">
+                            Status
+                            {sortConfig?.key === 'status' ? (
+                              sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                            ) : (
+                              <ArrowUpDown className="w-3 h-3 opacity-30" />
+                            )}
+                          </div>
+                        </th>
+                        <th 
+                          className="px-5 py-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border text-right cursor-pointer hover:text-foreground transition-colors"
+                          onClick={() => handleSort('updatedAt')}
+                        >
+                          <div className="flex items-center gap-1 justify-end">
+                            Atualizado
+                            {sortConfig?.key === 'updatedAt' ? (
+                              sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                            ) : (
+                              <ArrowUpDown className="w-3 h-3 opacity-30" />
+                            )}
+                          </div>
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -591,26 +719,30 @@ export default function App() {
                             </td>
                             <td className="px-5 py-4 border-b border-border/50">
                               <Badge className={`text-[9px] uppercase font-black px-2 py-0.5 rounded-md shadow-none ${
-                                station.status === 'verde' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100' : 
-                                station.status === 'amarelo' ? 'bg-amber-100 text-amber-700 hover:bg-amber-100' : 
+                                station.status === 'Disponível' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100' : 
+                                station.status === 'Com Fila' ? 'bg-amber-100 text-amber-700 hover:bg-amber-100' : 
                                 'bg-rose-100 text-rose-700 hover:bg-rose-100'
                               }`}>
-                                {station.status === 'verde' ? 'Disponível' : 
-                                 station.status === 'amarelo' ? 'Com Fila' : 'Esgotado'}
+                                {station.status}
                               </Badge>
                             </td>
                             <td className="px-5 py-4 border-b border-border/50 text-right">
-                              <Button 
-                                variant="secondary" 
-                                size="sm" 
-                                className="h-7 px-2 text-[10px] font-bold bg-primary-soft text-primary hover:bg-primary hover:text-white transition-all"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openEdit(station);
-                                }}
-                              >
-                                EDITAR
-                              </Button>
+                              <div className="flex flex-col items-end gap-1">
+                                <span className="text-[10px] text-muted-foreground font-medium">
+                                  {formatDistanceToNow(new Date(station.updatedAt), { addSuffix: true, locale: ptBR })}
+                                </span>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="h-6 px-2 text-[9px] font-bold text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openEdit(station);
+                                  }}
+                                >
+                                  <Edit2 className="w-3 h-3 mr-1" /> EDITAR
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                           {expandedStationId === station.id && (
@@ -631,39 +763,50 @@ export default function App() {
                                   </div>
                                   
                                   <div className="space-y-3">
-                                    <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Navegação</h4>
-                                    {station.latitude && station.longitude ? (
-                                      <div className="flex flex-wrap gap-2">
-                                        <Button 
-                                          variant="outline" 
-                                          size="sm" 
-                                          className="h-8 text-[10px] bg-white"
-                                          onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${station.latitude},${station.longitude}`, '_blank')}
-                                        >
-                                          <Navigation className="w-3 h-3 mr-1.5 text-blue-600" /> Google Maps
-                                        </Button>
-                                        <Button 
-                                          variant="outline" 
-                                          size="sm" 
-                                          className="h-8 text-[10px] bg-white"
-                                          onClick={() => window.open(`https://waze.com/ul?ll=${station.latitude},${station.longitude}&navigate=yes`, '_blank')}
-                                        >
-                                          <ExternalLink className="w-3 h-3 mr-1.5 text-cyan-500" /> Waze
-                                        </Button>
-                                        <Button 
-                                          variant="outline" 
-                                          size="sm" 
-                                          className="h-8 text-[10px] bg-white"
-                                          onClick={() => window.open(`https://maps.apple.com/?q=${station.latitude},${station.longitude}`, '_blank')}
-                                        >
-                                          <MapIcon className="w-3 h-3 mr-1.5 text-gray-700" /> Apple Maps
-                                        </Button>
-                                      </div>
-                                    ) : (
-                                      <p className="text-[10px] text-muted-foreground italic flex items-center gap-1">
-                                        <AlertCircle className="w-3 h-3" /> Coordenadas não disponíveis para este posto.
-                                      </p>
-                                    )}
+                                    <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Ações</h4>
+                                    <div className="flex flex-wrap gap-2">
+                                      <Button 
+                                        variant="outline" 
+                                        size="sm" 
+                                        className="h-8 text-[10px] bg-white border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                        onClick={() => shareOnWhatsApp(station)}
+                                      >
+                                        <MessageCircle className="w-3.5 h-3.5 mr-1.5 fill-emerald-500 text-emerald-500" /> WhatsApp
+                                      </Button>
+                                      
+                                      {station.latitude && station.longitude ? (
+                                        <>
+                                          <Button 
+                                            variant="outline" 
+                                            size="sm" 
+                                            className="h-8 text-[10px] bg-white"
+                                            onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${station.latitude},${station.longitude}`, '_blank')}
+                                          >
+                                            <Navigation className="w-3 h-3 mr-1.5 text-blue-600" /> Google Maps
+                                          </Button>
+                                          <Button 
+                                            variant="outline" 
+                                            size="sm" 
+                                            className="h-8 text-[10px] bg-white"
+                                            onClick={() => window.open(`https://waze.com/ul?ll=${station.latitude},${station.longitude}&navigate=yes`, '_blank')}
+                                          >
+                                            <ExternalLink className="w-3 h-3 mr-1.5 text-cyan-500" /> Waze
+                                          </Button>
+                                          <Button 
+                                            variant="outline" 
+                                            size="sm" 
+                                            className="h-8 text-[10px] bg-white"
+                                            onClick={() => window.open(`https://maps.apple.com/?q=${station.latitude},${station.longitude}`, '_blank')}
+                                          >
+                                            <MapIcon className="w-3 h-3 mr-1.5 text-gray-700" /> Apple Maps
+                                          </Button>
+                                        </>
+                                      ) : (
+                                        <p className="text-[10px] text-muted-foreground italic flex items-center gap-1">
+                                          <AlertCircle className="w-3 h-3" /> Coordenadas não disponíveis para este posto.
+                                        </p>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               </td>
@@ -682,6 +825,23 @@ export default function App() {
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                   />
+                  
+                  {/* Reference Stations (OSM Data) */}
+                  {REFERENCE_STATIONS.map((ref, idx) => (
+                    <Marker 
+                      key={`ref-${idx}`} 
+                      position={[ref.lat, ref.lon]} 
+                      icon={getReferenceIcon()}
+                    >
+                      <Popup>
+                        <div className="p-1">
+                          <h3 className="font-bold text-xs">{ref.name}</h3>
+                          <Badge variant="secondary" className="text-[8px] mt-1 bg-blue-100 text-blue-700">Posto de Referência</Badge>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ))}
+
                   {filteredStations.filter(s => s.latitude && s.longitude).map(station => (
                     <Marker 
                       key={station.id} 
@@ -693,13 +853,20 @@ export default function App() {
                           <h3 className="font-bold text-sm">{station.name}</h3>
                           <p className="text-[10px] text-gray-500">{station.neighborhood}</p>
                           <Badge className={`text-[9px] mt-2 ${
-                            station.status === 'verde' ? 'bg-emerald-500' : 
-                            station.status === 'amarelo' ? 'bg-amber-500' : 'bg-rose-500'
+                            station.status === 'Disponível' ? 'bg-emerald-500' : 
+                            station.status === 'Com Fila' ? 'bg-amber-500' : 'bg-rose-500'
                           }`}>
-                            {station.status === 'verde' ? 'Disponível' : 
-                             station.status === 'amarelo' ? 'Com Fila' : 'Esgotado'}
+                            {station.status}
                           </Badge>
                           <div className="flex flex-col gap-1 mt-3">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="w-full h-7 text-[10px] border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                              onClick={() => shareOnWhatsApp(station)}
+                            >
+                              <MessageCircle className="w-3 h-3 mr-1 fill-emerald-500 text-emerald-500" /> WhatsApp
+                            </Button>
                             <Button 
                               variant="outline" 
                               size="sm" 
@@ -767,7 +934,7 @@ export default function App() {
                   <SelectValue placeholder="Selecione a marca" />
                 </SelectTrigger>
                 <SelectContent>
-                  {["Galp", "Petromoc", "Som", "Puma", "Total", "Nkomazi", "Engen", "Êxito", "RUR", "Union Energy", "Outro(a)-(especifique nas Observações)"].map((brand) => (
+                  {["Galp", "Petromoc", "Som", "Puma", "Total", "Nkomazi", "Engen", "BP", "Sasol", "Êxito", "RUR", "Union Energy", "Outro(a)-(especifique nas Observações)"].map((brand) => (
                     <SelectItem key={brand} value={brand} className="text-xs">
                       {brand}
                     </SelectItem>
@@ -788,51 +955,101 @@ export default function App() {
             
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Localização (Clique no mapa)</Label>
+                <Label>Localização (Opcional)</Label>
                 <Button 
                   type="button" 
                   variant="outline" 
                   size="xs" 
-                  className="h-7 text-[10px] flex items-center gap-1"
-                  onClick={() => {
-                    if (!navigator.geolocation) {
-                      toast.error("Geolocalização não suportada pelo navegador.");
-                      return;
-                    }
-                    toast.info("A obter localização...");
-                    navigator.geolocation.getCurrentPosition(
-                      (position) => {
-                        setFormData({
-                          ...formData,
-                          latitude: position.coords.latitude,
-                          longitude: position.coords.longitude
-                        });
-                        toast.success("Localização obtida!");
-                      },
-                      (error) => {
-                        console.error(error);
-                        toast.error("Erro ao obter localização. Verifique as permissões.");
-                      }
-                    );
-                  }}
+                  className={`h-7 text-[10px] ${showMapPicker ? 'bg-orange-50 text-orange-600 border-orange-200' : ''}`}
+                  onClick={() => setShowMapPicker(!showMapPicker)}
                 >
-                  <Crosshair className="w-3 h-3" /> Usar minha localização
+                  {showMapPicker ? 'Remover Localização' : 'Escolher no Mapa'}
                 </Button>
               </div>
-              <div className="h-40 w-full rounded-lg overflow-hidden border border-border">
-                <MapContainer center={editingStation?.latitude ? [editingStation.latitude, editingStation.longitude!] : maputoCenter} zoom={13} style={{ height: '100%', width: '100%' }}>
-                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                  <MapRecenter lat={formData.latitude} lng={formData.longitude} />
-                  <LocationPicker 
-                    initialPosition={formData.latitude ? [formData.latitude, formData.longitude!] : undefined}
-                    onLocationSelect={(lat, lng) => setFormData({...formData, latitude: lat, longitude: lng})} 
-                  />
-                </MapContainer>
-              </div>
-              <div className="flex gap-2 text-[10px] text-muted-foreground">
-                <span className="flex items-center gap-1"><Crosshair className="w-3 h-3" /> Lat: {formData.latitude?.toFixed(4) || '—'}</span>
-                <span className="flex items-center gap-1"><Crosshair className="w-3 h-3" /> Lng: {formData.longitude?.toFixed(4) || '—'}</span>
-              </div>
+              
+              {showMapPicker && (
+                <>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="xs" 
+                    className="h-7 text-[10px] w-full mb-2 flex items-center justify-center gap-1"
+                    onClick={() => {
+                      if (!navigator.geolocation) {
+                        toast.error("Geolocalização não suportada pelo navegador.");
+                        return;
+                      }
+                      toast.info("A obter localização...");
+                      navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                          setFormData({
+                            ...formData,
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude
+                          });
+                          toast.success("Localização obtida!");
+                        },
+                        (error) => {
+                          console.error(error);
+                          toast.error("Erro ao obter localização. Verifique as permissões.");
+                        }
+                      );
+                    }}
+                  >
+                    <Crosshair className="w-3 h-3" /> Usar minha localização atual
+                  </Button>
+                  <div className="h-40 w-full rounded-lg overflow-hidden border-2 border-orange-500/30 shadow-inner">
+                    <MapContainer center={editingStation?.latitude ? [editingStation.latitude, editingStation.longitude!] : maputoCenter} zoom={13} style={{ height: '100%', width: '100%' }}>
+                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                      
+                      {/* Reference Stations in Picker */}
+                      {REFERENCE_STATIONS.map((ref, idx) => (
+                        <Marker 
+                          key={`ref-picker-${idx}`} 
+                          position={[ref.lat, ref.lon]} 
+                          icon={getReferenceIcon()}
+                          eventHandlers={{
+                            click: () => {
+                              setFormData(prev => ({
+                                ...prev,
+                                name: ref.name,
+                                neighborhood: ref.neighborhood,
+                                latitude: ref.lat,
+                                longitude: ref.lon
+                              }));
+                              toast.info(`Posto selecionado: ${ref.name} (${ref.neighborhood})`);
+                            }
+                          }}
+                        >
+                          <Popup>
+                            <p className="text-[10px] font-bold">{ref.name}</p>
+                            <p className="text-[8px]">Clique para selecionar este posto</p>
+                          </Popup>
+                        </Marker>
+                      ))}
+
+                      <MapRecenter lat={formData.latitude} lng={formData.longitude} />
+                      <LocationPicker 
+                        initialPosition={formData.latitude ? [formData.latitude, formData.longitude!] : undefined}
+                        onLocationSelect={(lat, lng) => setFormData({...formData, latitude: lat, longitude: lng})} 
+                        onNeighborhoodSuggest={(neighborhood) => {
+                          if (!formData.neighborhood) {
+                            setFormData(prev => ({ ...prev, neighborhood }));
+                            toast.info(`Bairro sugerido: ${neighborhood}`);
+                          }
+                        }}
+                      />
+                    </MapContainer>
+                  </div>
+                  <p className="text-[10px] text-orange-600 font-medium bg-orange-50 p-2 rounded-lg border border-orange-100">
+                    Dica: Podes clicar nos pontos azuis no mapa para selecionar postos conhecidos.
+                  </p>
+                  <div className="flex gap-2 text-[10px] text-muted-foreground">
+                    <span className="flex items-center gap-1"><Crosshair className="w-3 h-3" /> Lat: {formData.latitude?.toFixed(4) || '—'}</span>
+                    <span className="flex items-center gap-1"><Crosshair className="w-3 h-3" /> Lng: {formData.longitude?.toFixed(4) || '—'}</span>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -845,17 +1062,17 @@ export default function App() {
                   <SelectValue placeholder="Selecione o estado" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="verde">
+                  <SelectItem value="Disponível">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-emerald-500" /> Disponível
                     </div>
                   </SelectItem>
-                  <SelectItem value="amarelo">
+                  <SelectItem value="Com Fila">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-amber-500" /> Com Fila
                     </div>
                   </SelectItem>
-                  <SelectItem value="vermelho">
+                  <SelectItem value="Esgotado">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-rose-500" /> Esgotado
                     </div>

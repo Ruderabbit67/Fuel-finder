@@ -10,10 +10,10 @@ service cloud.firestore {
     // Fields:
     //   - name: string (required)
     //   - neighborhood: string (required)
-    //   - status: string (required, ['verde', 'amarelo', 'vermelho'])
+    //   - status: string (required, ['Disponível', 'Com Fila', 'Esgotado'])
     //   - observations: string (optional)
     //   - updatedAt: string (required, ISO 8601)
-    //   - updatedBy: string (required, UID)
+    //   - updatedBy: string (required, UID or 'guest')
     //
     // ===============================================================
 
@@ -41,7 +41,7 @@ service cloud.firestore {
              data.neighborhood is string && data.neighborhood.size() > 0 && data.neighborhood.size() < 100 &&
              (!('latitude' in data) || data.latitude is number) &&
              (!('longitude' in data) || data.longitude is number) &&
-             data.status in ['verde', 'amarelo', 'vermelho'] &&
+             data.status in ['Disponível', 'Com Fila', 'Esgotado'] &&
              data.updatedAt is string &&
              data.updatedBy is string && 
              (data.updatedBy == "guest" || (isAuthenticated() && data.updatedBy == request.auth.uid));
