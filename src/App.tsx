@@ -53,7 +53,9 @@ import {
   ArrowDown,
   Bell,
   Download,
-  Share2
+  Share2,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 // Leaflet
@@ -229,6 +231,26 @@ export default function App() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  // Dark Mode Logic
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') as 'light' | 'dark';
+    if (savedTheme) {
+      setTheme(savedTheme);
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      setTheme('dark');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
   const [showMapPicker, setShowMapPicker] = useState(false);
   
   // Form State
@@ -505,6 +527,16 @@ export default function App() {
           <Button 
             variant="ghost" 
             size="sm" 
+            className="h-8 w-8 p-0 rounded-full text-muted-foreground"
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            title="Alternar Tema"
+          >
+            {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </Button>
+
+          <Button 
+            variant="ghost" 
+            size="sm" 
             className={`h-8 w-8 p-0 rounded-full ${notificationsEnabled ? 'text-emerald-600' : 'text-muted-foreground'}`}
             onClick={requestNotificationPermission}
             title={notificationsEnabled ? "Notificações Ativas" : "Ativar Notificações"}
@@ -512,7 +544,7 @@ export default function App() {
             <Bell className={`w-4 h-4 ${notificationsEnabled ? 'fill-current' : ''}`} />
           </Button>
 
-          {user ? (
+          {user && (
             <div className="flex items-center gap-3">
               <div className="hidden sm:block text-right">
                 <p className="text-xs font-semibold">{user.displayName}</p>
@@ -522,10 +554,6 @@ export default function App() {
               </div>
               <img src={user.photoURL || ''} alt="User" className="w-8 h-8 rounded-full border border-border" referrerPolicy="no-referrer" />
             </div>
-          ) : (
-            <Button variant="outline" size="sm" onClick={handleLogin} className="rounded-lg border-border hover:bg-muted font-semibold text-xs">
-              <LogIn className="w-4 h-4 mr-2" /> Entrar
-            </Button>
           )}
         </div>
       </header>
