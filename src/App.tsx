@@ -298,7 +298,7 @@ export default function App() {
         if (prev && prev.status !== station.status) {
           new Notification(`Fuel-Tracker: ${station.name}`, {
             body: `Estado atualizado para: ${station.status} em ${station.neighborhood}`,
-            icon: 'https://cdn-icons-png.flaticon.com/512/483/483497.png'
+            icon: 'https://cdn-icons-png.flaticon.com/512/2311/2311296.png'
           });
         }
       });
